@@ -135,7 +135,7 @@ class Reserva:
         self.estado = "Cancelada"
         logging.info("Reserva %s cancelada.", self.numero)
 
-    def procesar(self, impuesto=0, descuento=0):
+   def procesar(self, impuesto=0, descuento=0):
         if self.estado != "Confirmada":
             raise ReservaInvalida("Primero debe confirmar la reserva.")
         total = self.servicio.calcular_costo(
@@ -272,4 +272,4 @@ if __name__ == "__main__":
         ejecutar()
     except Exception as error:
         logging.exception("Error inesperado: %s", error)
-        print("Ocurrió un error inesperado:", error)
+        print("Ocurrió un error inesperado:", error) 
