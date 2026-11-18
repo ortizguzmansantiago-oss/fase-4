@@ -7,7 +7,11 @@ No utiliza bases de datos: guarda la información en listas.
 from abc import ABC, abstractmethod
 import logging
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    filename="software_fj.log",
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 
 # Excepciones personalizadas
@@ -130,44 +134,181 @@ class Reserva:
             raise ReservaInvalida("La reserva ya está cancelada.")
         self.estado = "Cancelada"
         logging.info("Reserva %s cancelada.", self.numero)
+        
+  def procesar(self, impuesto=0, descuento=0):
+        # Una reserva solo puede procesarse cuando ya fue confirmada.
+        if self.estado == "Confirmada":
+            total = self.servicio.calcular_costo(
+                self.duracion,
+                impuesto,
+                descuento
+            )
+            logging.info(
+                "Reserva %s procesada. Total: %.2f",
+                self.numero,
+                total
+            )
+            return total
 
-# 1. solicitar cantidad de productos a registrar
-num_productos = int(input("ingrese el numero de productos a registrar: "))
-productos = []
-valor_total_inventario = 0
-# 2. registrar datos de cada producto 
-for i in range(num_productos) : 
-    print(f"\n--- producto {i+1} ---")
-    nombre = input("nombre del producto:")
-    cantidad = int(input("cantidad de inventario: "))
-    cantidad_minima = int(input("cantidad minima requerida: "))
-    precio = float(input("precio por unidad: "))
-    #Guardar producto 
-    producto = {
-        "nombre": nombre,
-        "cantidad" : cantidad,
-        "cantidad minima": cantidad_minima,
-        "precio": precio
-    }
-    productos.append(producto)
-    #sumar al valor total del invetario 
-    valor_total_inventario += cantidad * precio 
-    #3. mostrar resultados
-    print("\n========================================")
-    print(" RESULTADOS DEL INVENTARIO")
-    print("========================================")
-    print(f"\nValor total del invetarion: $ {valor_total_inventario:, .2f}")
-    #productos que necesitan rebastecimiento 
-    print("\nProductos que necesitan rebastecimiento:")
-    necesitan_rebastecer = false
-    for p in producto :
-        if p["cantidad"] < p["cantidad_minima"]:
-             necesitan_reabastecer = True
-             print(f"- {p['nombre']} (cantidad actual: {p['cantidad']}, minima: {p['cantidad_minima']})")
-             if not necesitan_reabastecer:
-                print("Todos los productos tienen inventario sufuciente.")
+        raise ReservaInvalida("Primero debe confirmar la reserva.")
 
-    print("\nProceso terminado. Revise software_fj.log para ver los registros.")
+    def mostrar(self):
+        datos_cliente = self.cliente.nombre
+        tipo_servicio = self.servicio.describir()
+        return (
+            f"Reserva {self.numero}: {datos_cliente}, "
+            f"{tipo_servicio}, {self.estado}"
+        )
+
+
+# Clase encargada de administrar clientes, servicios y reservas.
+class SoftwareFJ:
+    def __init__(self):
+        self.clientes = list()
+        self.servicios = list()
+        self.reservas = list()
+        self.numero = 1
+
+    def registrar_cliente(self, cliente):
+        try:
+            cliente_repetido = any(
+                registrado._codigo == cliente._codigo
+                for registrado in self.clientes
+            )
+
+            if cliente_repetido:
+                raise DatoInvalido("El cliente ya está registrado.")
+
+            self.clientes.append(cliente)
+
+        except ErrorSistema as error:
+            logging.error("Registro de cliente: %s", error)
+            print("Error:", error)
+            return False
+
+        logging.info("Cliente registrado: %s", cliente.nombre)
+        print("Cliente registrado:", cliente.nombre)
+        return True
+
+    def agregar_servicio(self, servicio):
+        try:
+            servicio_repetido = any(
+                registrado.codigo == servicio.codigo
+                for registrado in self.servicios
+            )
+
+            if servicio_repetido:
+                raise DatoInvalido("El servicio ya existe.")
+
+            self.servicios.append(servicio)
+
+        except ErrorSistema as error:
+            logging.error("Registro de servicio: %s", error)
+            print("Error:", error)
+            return False
+
+        logging.info("Servicio agregado: %s", servicio.nombre)
+        print("Servicio agregado:", servicio.nombre)
+        return True
+
+    def crear_reserva(self, cliente, servicio, duracion):
+        try:
+            # Se comprueba que ambos elementos pertenezcan al sistema.
+            if cliente not in self.clientes:
+                raise ReservaInvalida("El cliente no está registrado.")
+
+            if servicio not in self.servicios:
+                raise ReservaInvalida("El servicio no está disponible.")
+
+            nueva_reserva = Reserva(
+                self.numero,
+                cliente,
+                servicio,
+                duracion
+            )
+
+            self.reservas.append(nueva_reserva)
+            logging.info("Reserva %s creada.", nueva_reserva.numero)
+            print("Reserva creada:", nueva_reserva.numero)
+
+            self.numero += 1
+            return nueva_reserva
+
+        except ErrorSistema as error:
+            logging.error("Creación de reserva: %s", error)
+            print("Error:", error)
+            return None
+
+        finally:
+            print("Fin del intento de reserva.")
+
+
+def ejecutar():
+    sistema = SoftwareFJ()
+    print("\\n=== SISTEMA SOFTWARE FJ ===")
+
+    # Registro de clientes.
+    cliente1 = Cliente("C01", "Carlos Pérez", "carlos@gmail.com")
+    sistema.registrar_cliente(cliente1)
+
+    try:
+        Cliente("C02", "Ana", "correo incorrecto")
+    except DatoInvalido as error:
+        logging.error("Cliente inválido: %s", error)
+        print("Error de cliente:", error)
+
+    cliente2 = Cliente("C03", "Laura Gómez", "laura@gmail.com")
+    sistema.registrar_cliente(cliente2)
+
+    # Creación y registro de los servicios disponibles.
+    sala = Sala("S01", "Sala de reuniones", 50000)
+    equipo = Equipo("E01", "Computador", 80000)
+    asesoria = Asesoria("A01", "Asesoría de programación", 60000)
+
+    for servicio in (sala, equipo, asesoria):
+        sistema.agregar_servicio(servicio)
+
+    # Comprobación de una tarifa incorrecta.
+    try:
+        Sala("S02", "Sala incorrecta", 0)
+    except DatoInvalido as error:
+        logging.error("Servicio inválido: %s", error)
+        print("Error de servicio:", error)
+
+    # Primera reserva: se confirma y se calcula con impuesto y descuento.
+    reserva1 = sistema.crear_reserva(cliente1, sala, 2)
+
+    if reserva1 is not None:
+        reserva1.confirmar()
+        total_reserva1 = reserva1.procesar(impuesto=19, descuento=10)
+        print("Total con impuesto y descuento:", total_reserva1)
+
+    # Segunda reserva: se confirma y se calcula sin ajustes.
+    reserva2 = sistema.crear_reserva(cliente2, equipo, 3)
+
+    if reserva2 is not None:
+        reserva2.confirmar()
+        print("Total normal:", reserva2.procesar())
+
+    # Pruebas de validación de reservas.
+    sistema.crear_reserva(cliente1, asesoria, 0)
+
+    cliente3 = Cliente("C99", "Pedro Ruiz", "pedro@gmail.com")
+    sistema.crear_reserva(cliente3, sala, 1)
+
+    # Se cancela la segunda reserva.
+    if reserva2 is not None:
+        reserva2.cancelar()
+        print("Reserva cancelada.")
+
+    print("\\n--- Reservas registradas ---")
+    for elemento in sistema.reservas:
+        print(elemento.mostrar())
+
+    print(
+        "\\nProceso terminado. Revise software_fj.log "
+        "para ver los registros."
+    )
 
 
 if __name__ == "__main__":
@@ -176,4 +317,4 @@ if __name__ == "__main__":
     except Exception as error:
         logging.exception("Error inesperado: %s", error)
         print("Ocurrió un error inesperado:", error)
-
+        
